@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "commonjs",
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "declaration": true,
+    "sourceMap": true,
+    "outDir": "./dist/",
+    "strict": false,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "noImplicitReturns": true,
+    "typeRoots": ["node_modules/@types"],
+    "skipLibCheck": true,
+    "noEmitOnError": true,
+    "removeComments": false
+  },
+  "files": [
+    "index.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ],
+  "include": [
+    "test/**/*.spec.ts",
+    "src/*.ts",
+    "examples/*.ts"
+  ]
+}
