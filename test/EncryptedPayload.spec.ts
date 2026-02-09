@@ -59,6 +59,7 @@ describe('EncryptedPayload -->', () => {
             const json = {
                 ciphertext: "zyFIAqnq8fihaJFqgH9gVKGT1Aa8dbxXqrcWb//Ckv7R/DJDgdXOY8ejc6KNURPGujULpv0fQnN87AQFldmCgkGYq0CBSHwhOhyCvEBK18g=",
                 salt: "12345678901234567890123456789012",
+                version: 4,
             };
 
             // Act
@@ -69,6 +70,7 @@ describe('EncryptedPayload -->', () => {
             expect(payload.ciphertext).to.be.equal(json.ciphertext);
             expect(payload.salt).to.not.be.undefined;
             expect(payload.salt).to.be.equal(json.salt);
+            expect(payload.version).to.be.equal(json.version);
         });
     });
 

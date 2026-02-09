@@ -81,7 +81,7 @@ const legacyDecrypt = (payload: EncryptedPayload, password: string): string => {
 
 describe('EncryptionService -->', () => {
 
-    describe('encrypt() should', () => {
+    describe('encryptV4() should', () => {
 
         it('should create encrypted payload with salt', () => {
             // Arrange:
@@ -89,24 +89,25 @@ describe('EncryptionService -->', () => {
             const pass = 'password';
 
             // Act
-            const encrypted = EncryptionService.encrypt(data, pass);
+            const encrypted = EncryptionService.encryptV4(data, pass);
 
             // Assert
             expect(encrypted.ciphertext).to.not.be.undefined;
             expect(encrypted.salt).to.not.be.undefined;
             expect(encrypted.salt).to.have.lengthOf(64);
+            expect(encrypted.version).to.be.equal(4);
         });
 
-        it('should create correctly sized ciphertext and salt', () => {
+        it('should create ciphertext with nonce prefix and salt', () => {
             // Arrange:
             const data = 'this will be encrypted.';
             const pass = 'password';
 
             // Act
-            const encrypted = EncryptionService.encrypt(data, pass);
+            const encrypted = EncryptionService.encryptV4(data, pass);
 
             // Assert
-            expect(encrypted.ciphertext).to.have.lengthOf(76);
+            expect(encrypted.ciphertext.substr(0, 24)).to.match(/^[0-9a-f]{24}$/);
             expect(encrypted.salt).to.have.lengthOf(64);
         });
 
@@ -116,9 +117,9 @@ describe('EncryptionService -->', () => {
             const pass = 'password';
 
             // Act
-            const encrypted_1 = EncryptionService.encrypt(data, pass);
-            const encrypted_2 = EncryptionService.encrypt(data, pass);
-            const encrypted_3 = EncryptionService.encrypt(data, pass);
+            const encrypted_1 = EncryptionService.encryptV4(data, pass);
+            const encrypted_2 = EncryptionService.encryptV4(data, pass);
+            const encrypted_3 = EncryptionService.encryptV4(data, pass);
 
             // Assert
             expect(encrypted_1).to.not.be.equal(encrypted_2);
@@ -138,7 +139,7 @@ describe('EncryptionService -->', () => {
             const pass = 'password';
 
             // Act
-            const encrypted = EncryptionService.encrypt(data, pass);
+            const encrypted = EncryptionService.encryptV4(data, pass);
             const decrypted = EncryptionService.decrypt(encrypted, pass);
 
             // Assert
@@ -160,13 +161,13 @@ describe('EncryptionService -->', () => {
     });
 
     describe('compatibility should', () => {
-        it('allow crypto-js@4.1.1 to decrypt new payloads', () => {
+        it('allow crypto-js@4.1.1 to decrypt v3 payloads', () => {
             // Arrange:
             const data = 'new encrypted payload';
             const pass = 'password';
 
             // Act
-            const encrypted = EncryptionService.encrypt(data, pass);
+            const encrypted = EncryptionService.encryptV3(data, pass);
             const decrypted = legacyDecrypt(encrypted, pass);
 
             // Assert

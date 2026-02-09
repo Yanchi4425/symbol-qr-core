@@ -49,6 +49,7 @@ class ExportAccountDataSchema extends QRCodeDataSchema {
             return {
                 "ciphertext": encryptedData.ciphertext,
                 "salt": encryptedData.salt,
+                "version": encryptedData.version,
             };
         } else {
             return {

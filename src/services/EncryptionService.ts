@@ -13,9 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {cbc} from "@noble/ciphers/aes.js";
+import {cbc, gcm} from "@noble/ciphers/aes.js";
 import {pbkdf2} from "@noble/hashes/pbkdf2.js";
 import {sha1} from "@noble/hashes/legacy.js";
+import {sha256} from "@noble/hashes/sha2.js";
 
 // internal dependencies
 import {
@@ -27,16 +28,22 @@ import {
  * for encryption/decryption of data.
  *
  * Implemented algorithms for encryption/decryption include:
- * - AES with PBKDF2 (Password-Based Key Derivation Function)
+ * - v3: AES-CBC with PBKDF2-SHA1 (legacy)
+ * - v4: AES-GCM with PBKDF2-SHA256 (modern)
  *
  * @since 0.3.0
  */
 class EncryptionService {
 
-    private static readonly SALT_BYTES = 32;
-    private static readonly IV_BYTES = 16;
-    private static readonly KEY_BYTES = 32;
-    private static readonly PBKDF2_ITERATIONS = 2000;
+    private static readonly SALT_BYTES_V3 = 32;
+    private static readonly IV_BYTES_V3 = 16;
+    private static readonly KEY_BYTES_V3 = 32;
+    private static readonly PBKDF2_ITERATIONS_V3 = 2000;
+    private static readonly SALT_BYTES_V4 = 32;
+    private static readonly NONCE_BYTES_V4 = 12;
+    private static readonly KEY_BYTES_V4 = 32;
+    private static readonly PBKDF2_ITERATIONS_V4 = 600000;
+    private static readonly VERSION_V4 = 4;
     private static readonly textEncoder = new TextEncoder();
     private static readonly textDecoder = new TextDecoder();
 
@@ -54,10 +61,35 @@ class EncryptionService {
         data: string,
         password: string,
     ): EncryptedPayload {
+        return EncryptionService.encryptV4(data, password);
+    }
 
-        const salt = EncryptionService.randomBytes(EncryptionService.SALT_BYTES);
-        const iv = EncryptionService.randomBytes(EncryptionService.IV_BYTES);
-        return EncryptionService.encryptWithParams(data, password, salt, iv);
+    /**
+     * The `encryptV4` method will encrypt given `data` raw string
+     * with given `password` password using the modern profile.
+     *
+     * - KDF: PBKDF2-HMAC-SHA-256 (high iteration)
+     * - Cipher: AES-256-GCM
+     */
+    public static encryptV4(
+        data: string,
+        password: string,
+    ): EncryptedPayload {
+        const salt = EncryptionService.randomBytes(EncryptionService.SALT_BYTES_V4);
+        const nonce = EncryptionService.randomBytes(EncryptionService.NONCE_BYTES_V4);
+        return EncryptionService.encryptWithParamsV4(data, password, salt, nonce);
+    }
+
+    /**
+     * @deprecated Use encryptV4 instead.
+     */
+    public static encryptV3(
+        data: string,
+        password: string,
+    ): EncryptedPayload {
+        const salt = EncryptionService.randomBytes(EncryptionService.SALT_BYTES_V3);
+        const iv = EncryptionService.randomBytes(EncryptionService.IV_BYTES_V3);
+        return EncryptionService.encryptWithParamsV3(data, password, salt, iv);
     }
 
     /**
@@ -69,7 +101,41 @@ class EncryptionService {
         payload: EncryptedPayload,
         password: string,
     ): string {
+        if (payload.version === EncryptionService.VERSION_V4) {
+            return EncryptionService.decryptV4(payload, password);
+        }
+        return EncryptionService.decryptV3(payload, password);
+    }
 
+    /**
+     * Decrypts data encrypted with the modern profile (v4).
+     */
+    public static decryptV4(
+        payload: EncryptedPayload,
+        password: string,
+    ): string {
+        const salt = EncryptionService.hexToBytes(payload.salt);
+        const priv = payload.ciphertext;
+        const nonceHex = priv.substr(0, EncryptionService.NONCE_BYTES_V4 * 2);
+        const cipherBase64 = priv.substr(EncryptionService.NONCE_BYTES_V4 * 2);
+        const nonce = EncryptionService.hexToBytes(nonceHex);
+        const cipherBytes = EncryptionService.base64ToBytes(cipherBase64);
+        const key = EncryptionService.deriveKeyV4(password, salt);
+        const decryptedBytes = gcm(key, nonce).decrypt(cipherBytes);
+        const decryptedText = EncryptionService.bytesToUtf8(decryptedBytes);
+        if (!decryptedText) {
+            throw Error('Empty decrypted text!!');
+        }
+        return decryptedText;
+    }
+
+    /**
+     * Decrypts data encrypted with the legacy profile (v3).
+     */
+    public static decryptV3(
+        payload: EncryptedPayload,
+        password: string,
+    ): string {
         // read payload
         const salt = EncryptionService.hexToBytes(payload.salt);
         const priv = payload.ciphertext;
@@ -81,7 +147,7 @@ class EncryptionService {
         const cipherBytes = EncryptionService.base64ToBytes(cipherBase64);
 
         // re-generate key (PBKDF2)
-        const key = EncryptionService.deriveKey(password, salt);
+        const key = EncryptionService.deriveKeyV3(password, salt);
 
         // decrypt and return
         const decryptedBytes = cbc(key, iv).decrypt(cipherBytes);
@@ -104,16 +170,16 @@ class EncryptionService {
     ): EncryptedPayload {
         const salt = EncryptionService.hexToBytes(saltHex);
         const iv = EncryptionService.hexToBytes(ivHex);
-        return EncryptionService.encryptWithParams(data, password, salt, iv);
+        return EncryptionService.encryptWithParamsV3(data, password, salt, iv);
     }
 
-    private static encryptWithParams(
+    private static encryptWithParamsV3(
         data: string,
         password: string,
         salt: Uint8Array,
         iv: Uint8Array,
     ): EncryptedPayload {
-        const key = EncryptionService.deriveKey(password, salt);
+        const key = EncryptionService.deriveKeyV3(password, salt);
         const dataBytes = EncryptionService.utf8ToBytes(data);
         const encryptedBytes = cbc(key, iv).encrypt(dataBytes);
 
@@ -123,14 +189,39 @@ class EncryptionService {
         return new EncryptedPayload(ciphertext, usedSalt);
     }
 
-    private static deriveKey(
+    private static encryptWithParamsV4(
+        data: string,
+        password: string,
+        salt: Uint8Array,
+        nonce: Uint8Array,
+    ): EncryptedPayload {
+        const key = EncryptionService.deriveKeyV4(password, salt);
+        const dataBytes = EncryptionService.utf8ToBytes(data);
+        const encryptedBytes = gcm(key, nonce).encrypt(dataBytes);
+        const ciphertext = EncryptionService.bytesToHex(nonce) + EncryptionService.bytesToBase64(encryptedBytes);
+        const usedSalt = EncryptionService.bytesToHex(salt);
+        return new EncryptedPayload(ciphertext, usedSalt, EncryptionService.VERSION_V4);
+    }
+
+    private static deriveKeyV3(
         password: string,
         salt: Uint8Array,
     ): Uint8Array {
         const passwordBytes = EncryptionService.utf8ToBytes(password);
         return pbkdf2(sha1, passwordBytes, salt, {
-            c: EncryptionService.PBKDF2_ITERATIONS,
-            dkLen: EncryptionService.KEY_BYTES,
+            c: EncryptionService.PBKDF2_ITERATIONS_V3,
+            dkLen: EncryptionService.KEY_BYTES_V3,
+        });
+    }
+
+    private static deriveKeyV4(
+        password: string,
+        salt: Uint8Array,
+    ): Uint8Array {
+        const passwordBytes = EncryptionService.utf8ToBytes(password);
+        return pbkdf2(sha256, passwordBytes, salt, {
+            c: EncryptionService.PBKDF2_ITERATIONS_V4,
+            dkLen: EncryptionService.KEY_BYTES_V4,
         });
     }
 
