@@ -34,7 +34,13 @@ class EncryptedPayload {
                  *
                  * @var {string}
                  */
-                public readonly salt: string) {}
+                public readonly salt: string,
+                /**
+                 * The encryption profile version.
+                 *
+                 * @var {number | undefined}
+                 */
+                public readonly version?: number) {}
 
     /**
      * Parse a JSON representation of an encrypted
@@ -61,7 +67,8 @@ class EncryptedPayload {
             throw new Error("Missing mandatory field 'salt'.");
         }
 
-        return new EncryptedPayload(jsonObject.ciphertext, jsonObject.salt);
+        const version = jsonObject.hasOwnProperty('version') ? jsonObject.version : undefined;
+        return new EncryptedPayload(jsonObject.ciphertext, jsonObject.salt, version);
     }
 
     /**

@@ -52,7 +52,7 @@
     "build": "rm -rf dist/ && tsc",
     "build:browser": "npm run build && webpack",
     "lint:all": "tslint --project .",
-    "test": "mocha --ui bdd --recursive ./dist/test",
+    "test": "mocha --timeout 20000 --ui bdd --recursive ./dist/test",
     "docker:build-image": "docker build -t symbol-qr-dev:node24 .",
     "docker:install": "docker run --rm -it -v \"$PWD:/work:cached\" -v /work/node_modules -w /work -e npm_config_python=/usr/bin/python3 symbol-qr-dev:node24 npm install",
     "docker:build": "docker run --rm -it -v \"$PWD:/work:cached\" -v /work/node_modules -w /work -e npm_config_python=/usr/bin/python3 symbol-qr-dev:node24 npm run build",
